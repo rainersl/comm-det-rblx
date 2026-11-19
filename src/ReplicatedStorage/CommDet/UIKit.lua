@@ -2,6 +2,7 @@
 local TweenService = game:GetService("TweenService")
 
 local Theme = require(script.Parent.Theme)
+local Audio = require(script.Parent.Systems.Audio)
 local C, F = Theme.C, Theme.F
 
 local UI = {}
@@ -277,6 +278,7 @@ function UI.stamp(parent, text, o)
 	local s = UI.stroke(color, o.thick or 2.5, 0.08)
 	s.Parent = lbl
 	if o.animate ~= false then
+		Audio.play("stamp", { minGap = 0.25, pitch = 0.95 + math.random() * 0.1 })
 		local sc = new("UIScale", { Scale = 1.8, Parent = lbl })
 		lbl.TextTransparency = 1
 		s.Transparency = 1
@@ -357,6 +359,7 @@ function UI.button(parent, text, o)
 	if o.onClick then
 		btn.Activated:Connect(function()
 			if enabled then
+				if o.sound ~= false then Audio.play("click", { pitch = 0.92 + math.random() * 0.16 }) end
 				o.onClick(btn)
 			end
 		end)
@@ -465,6 +468,12 @@ function UI.silhouette(photo, look, small)
 		UI.frame({ BackgroundColor3 = C.photoLight, BackgroundTransparency = 0.15, Size = UDim2.fromScale(0.04, 0.012),
 			AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, headY + 0.17), ZIndex = z, Parent = root })
 	end
+	if has.tie then
+		local knot = UI.frame({ BackgroundColor3 = C.photoLight, BackgroundTransparency = 0.1, Size = UDim2.fromScale(0.05, 0.05), SizeConstraint = Enum.SizeConstraint.RelativeXX,
+			AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, headY + 0.5), Rotation = 45, ZIndex = z, Parent = root })
+		UI.frame({ BackgroundColor3 = C.photoLight, BackgroundTransparency = 0.1, Size = UDim2.fromScale(0.05, 0.22),
+			AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, headY + 0.52), ZIndex = z, Parent = root })
+	end
 	if has.phone then
 		local ph = UI.frame({ BackgroundColor3 = Color3.fromRGB(196, 214, 230), Size = UDim2.fromScale(0.1, 0.16),
 			AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.68, 0.84), Rotation = 12, ZIndex = z, Parent = root })
@@ -571,6 +580,7 @@ function UI.typewrite(label, cps, onDone)
 			if ctrl.done or not label.Parent then return end
 			shown += 1
 			label.MaxVisibleGraphemes = shown
+			if shown % 4 == 1 then Audio.play("type", { minGap = 0.08, pitch = 0.9 + math.random() * 0.2 }) end
 		end
 		if not ctrl.done then
 			ctrl.done = true

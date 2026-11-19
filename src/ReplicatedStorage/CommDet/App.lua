@@ -1,7 +1,9 @@
--- main
+-- Comm-Det: app core. Creates the screen layers, scales the stage, switches screens,
+-- opens modals, shows short notices (toasts) and phone messages.
 local Config = require(script.Parent.Config)
 local UI = require(script.Parent.UIKit)
 local CaseState = require(script.Parent.Systems.CaseState)
+local Audio = require(script.Parent.Systems.Audio)
 local C, F = UI.C, UI.F
 
 local App = {}
@@ -21,6 +23,7 @@ local function screenGui(parent, name, order, safe)
 	})
 end
 
+-- 960x540 stage that scales to fit any screen
 local function makeStage(gui, name)
 	local stage = UI.frame({
 		Name = name or "Stage",
@@ -73,6 +76,30 @@ function App.new(playerGui, caseModule)
 	self.toastGui = screenGui(playerGui, "CommDet_Toast", 10, true)
 	self.toastStage = makeStage(self.toastGui, "ToastStage")
 
+	-- sound on/off switch, top-right corner
+	local soundBtn = UI.new("TextButton", {
+		Name = "SoundToggle", Text = "SOUND: ON", FontFace = F.mono, TextSize = 9, TextColor3 = C.paper,
+		BackgroundColor3 = C.ink, BackgroundTransparency = 0.35, BorderSizePixel = 0, AutoButtonColor = false,
+		AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -4, 0, 0), Size = UDim2.fromOffset(72, 13), ZIndex = 60,
+		Parent = self.toastStage,
+	})
+	UI.corner(4).Parent = soundBtn
+	soundBtn.Activated:Connect(function()
+		Audio.setMuted(not Audio.isMuted())
+		soundBtn.Text = Audio.isMuted() and "SOUND: OFF" or "SOUND: ON"
+		Audio.play("click")
+	end)
+	local musicBtn = soundBtn:Clone()
+	musicBtn.Name = "MusicToggle"
+	musicBtn.Text = "MUSIC: ON"
+	musicBtn.Position = UDim2.new(1, -80, 0, 0)
+	musicBtn.Parent = self.toastStage
+	musicBtn.Activated:Connect(function()
+		Audio.setMusicMuted(not Audio.isMusicMuted())
+		musicBtn.Text = Audio.isMusicMuted() and "MUSIC: OFF" or "MUSIC: ON"
+		Audio.play("click")
+	end)
+
 	self:newCase()
 	return self
 end
@@ -80,8 +107,10 @@ end
 function App:newCase()
 	self.case = require(self.caseModule)
 	self.state = CaseState.new(self.case)
+	self.phoneOpen = false
 end
 
+-- Switch screen: Title, Briefing, Map, Board, Interview, Sampling, MoneyTrail, Report, Hearing, Ending
 function App:go(screenName, args)
 	self:closeModal()
 	if self.cleanup then
@@ -99,19 +128,22 @@ function App:go(screenName, args)
 	})
 	self.screen = container
 	self.current = screenName
+	Audio.forScreen(screenName, args)
 	local mod = require(self.screens:WaitForChild(screenName))
 	local ok, result = pcall(mod.build, self, container, args)
 	if not ok then
-		warn("[CommDet] Ekrāns " .. screenName .. " neizdevās: " .. tostring(result))
+		warn("[CommDet] Screen " .. screenName .. " failed: " .. tostring(result))
 	elseif type(result) == "function" then
 		self.cleanup = result
 	end
+	-- short fade-in
 	local fade = UI.frame({ BackgroundColor3 = C.black, Size = UDim2.new(4, 0, 4, 0), Position = UDim2.fromScale(-1.5, -1.5), ZIndex = 999, Parent = container })
 	UI.tween(fade, 0.35, { BackgroundTransparency = 1 }).Completed:Connect(function()
 		fade:Destroy()
 	end)
 end
 
+-- Modal window. builder(frame, close) builds content in 960x540 coordinates.
 function App:openModal(builder, opts)
 	self:closeModal()
 	opts = opts or {}
@@ -122,6 +154,7 @@ function App:openModal(builder, opts)
 		Parent = self.overlayStage,
 	})
 	self.modal = frame
+	if not opts.silent then Audio.play("paper", { minGap = 0.3, pitch = 0.95 + math.random() * 0.1 }) end
 	self.overlayGui.Enabled = true
 	self.dimGui.Enabled = true
 	self.dim.BackgroundTransparency = 1
@@ -152,6 +185,7 @@ function App:closeModal()
 	self.dimGui.Enabled = false
 end
 
+-- Short notice: handwriting on a paper strip at the top of the screen
 function App:toast(text, color)
 	if self.toastFrame then
 		self.toastFrame:Destroy()
@@ -181,7 +215,7 @@ function App:toast(text, color)
 		ZIndex = 51,
 		Parent = sheet,
 	})
-	UI.new("UITextSizeConstraint", { MaxTextSize = 18, MinTextSize = 12, Parent = tl })
+	UI.new("UITextSizeConstraint", { MaxTextSize = 21, MinTextSize = 15, Parent = tl })
 	UI.tape(holder, UDim2.new(0.5, 0, 0, 0), 2, 70, 52)
 	self.toastFrame = holder
 	UI.tween(holder, 0.25, { Position = UDim2.new(0.5, 0, 0, 10) }, Enum.EasingStyle.Back)
@@ -191,6 +225,29 @@ function App:toast(text, color)
 				holder:Destroy()
 			end)
 		end
+	end)
+end
+
+-- Spend investigation time (returns true when the three days are over)
+function App:spend(n)
+	return self.state:spend(n)
+end
+
+-- Show the next pending phone message, if any. Messages chain one after another.
+function App:checkPhone(onDone)
+	if self.phoneOpen then return end
+	local msg = self.state:pendingPhone()
+	if not msg then
+		if onDone then onDone() end
+		return
+	end
+	self.phoneOpen = true
+	local Phone = require(self.screens:WaitForChild("Phone"))
+	Phone.open(self, msg, function()
+		self.phoneOpen = false
+		task.delay(0.4, function()
+			self:checkPhone(onDone)
+		end)
 	end)
 end
 

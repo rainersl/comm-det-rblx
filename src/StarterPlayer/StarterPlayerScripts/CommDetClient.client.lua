@@ -1,3 +1,4 @@
+-- Comm-Det client: starts the game. All UI is 2D and built from code (ReplicatedStorage.CommDet).
 local Players = game:GetService("Players")
 local StarterGui = game:GetService("StarterGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,5 +18,5 @@ local Config = require(root:WaitForChild("Config"))
 local App = require(root:WaitForChild("App"))
 
 local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
-local app = App.new(playerGui, root.Cases.EmptyWorkshop)
+local app = App.new(playerGui, root.Cases.MurkyWater)
 app:go(Config.DEBUG_START or "Title")
